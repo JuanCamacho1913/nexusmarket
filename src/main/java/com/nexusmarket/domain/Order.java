@@ -18,23 +18,21 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import lombok.ToString;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
  * Aggregate root de la compra. Congela, a través de {@link OrderItem}, el precio
- * pagado por cada variante ya que el precio de un {@link ProductVariant} puede
- * cambiar luego de concretada la compra.
+ * pagado por cada producto. Una orden en estado {@code DELIVERED_FINALIZED} es
+ * inmutable: todo mutador es rechazado.
  */
 @Entity
 @Table(name = "orders")
 @Getter
-@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
@@ -45,53 +43,54 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private String id;
 
-    @Column(nullable = false, unique = true)
-    private String orderTrackingNumber;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private OrderStatus status;
+    @Builder.Default
+    private OrderStatus status = OrderStatus.CART;
 
     @Column(precision = 19, scale = 2)
-    private BigDecimal totalAmount;
+    @Builder.Default
+    private BigDecimal totalAmount = BigDecimal.ZERO;
 
-    private LocalDateTime createdAt;
-
-    @ManyToOne
+    @ManyToOne(optional = false)
     @JoinColumn(name = "buyer_profile_id", nullable = false)
     private BuyerProfile buyerProfile;
 
+    @Getter(AccessLevel.NONE)
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
 
-    public Order(String orderTrackingNumber, BuyerProfile buyerProfile) {
-        if (orderTrackingNumber == null || orderTrackingNumber.isBlank()) {
-            throw new IllegalArgumentException("El número de seguimiento no puede estar vacío");
-        }
-        if (buyerProfile == null) {
-            throw new IllegalArgumentException("El comprador no puede ser nulo");
-        }
-        this.orderTrackingNumber = orderTrackingNumber;
-        this.buyerProfile = buyerProfile;
-        this.status = OrderStatus.CART;
-        this.totalAmount = BigDecimal.ZERO;
-        this.createdAt = LocalDateTime.now();
-        this.items = new ArrayList<>();
+    public List<OrderItem> getItems() {
+        return Collections.unmodifiableList(items);
     }
 
     public void addItem(OrderItem item) {
+        assertNotFinalized();
         if (item == null) {
             throw new IllegalArgumentException("El ítem no puede ser nulo");
         }
         items.add(item);
-        recalculateTotal();
     }
 
-    /** Suma el subtotal de cada {@link OrderItem} y actualiza {@code totalAmount}. */
-    public void recalculateTotal() {
-        this.totalAmount = items.stream()
-                .map(OrderItem::getSubtotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    public void updateStatus(OrderStatus newStatus) {
+        assertNotFinalized();
+        this.status = newStatus;
+    }
+
+    public void setTotalAmount(BigDecimal amount) {
+        assertNotFinalized();
+        this.totalAmount = amount;
+    }
+
+    public void setBuyerProfile(BuyerProfile bp) {
+        assertNotFinalized();
+        this.buyerProfile = bp;
+    }
+
+    private void assertNotFinalized() {
+        if (this.status == OrderStatus.DELIVERED_FINALIZED) {
+            throw new IllegalStateException("Un pedido finalizado no puede modificarse");
+        }
     }
 }

@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -22,28 +23,22 @@ import java.time.LocalDateTime;
 @Table(name = "billing_invoices")
 @Getter
 @Setter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
-@ToString
+@ToString(exclude = "order")
 public class BillingInvoice {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private String id;
 
-    @Column(nullable = false, unique = true)
-    private String invoiceNumber;
-
     @Column(precision = 19, scale = 2)
-    private BigDecimal tax;
-
-    @Column(precision = 19, scale = 2)
-    private BigDecimal totalPaid;
+    private BigDecimal amount;
 
     private LocalDateTime issuedAt;
 
-    @OneToOne
+    @OneToOne(optional = false)
     @JoinColumn(name = "order_id", unique = true, nullable = false)
     private Order order;
 }

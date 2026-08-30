@@ -29,7 +29,7 @@ import lombok.ToString;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
-@ToString(exclude = "password")
+@ToString
 public class User {
 
     @Id
@@ -40,10 +40,10 @@ public class User {
     private String fullName;
 
     @Column(nullable = false, unique = true)
-    private String email;
+    private String documentId;
 
-    @Column(nullable = false)
-    private String password;
+    @Column(nullable = false, unique = true)
+    private String email;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -51,37 +51,6 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private UserStatus status;
-
-    public User(String fullName, String email, String password, UserRole role) {
-        setFullName(fullName);
-        setEmail(email);
-        setPassword(password);
-        if (role == null) {
-            throw new IllegalArgumentException("El rol no puede ser nulo");
-        }
-        this.role = role;
-        this.status = UserStatus.ACTIVE;
-    }
-
-    public void setFullName(String fullName) {
-        if (fullName == null || fullName.isBlank()) {
-            throw new IllegalArgumentException("El nombre completo no puede estar vacío");
-        }
-        this.fullName = fullName;
-    }
-
-    public void setEmail(String email) {
-        if (email == null || email.isBlank()) {
-            throw new IllegalArgumentException("El email no puede estar vacío");
-        }
-        this.email = email;
-    }
-
-    public void setPassword(String password) {
-        if (password == null || password.isBlank()) {
-            throw new IllegalArgumentException("La contraseña no puede estar vacía");
-        }
-        this.password = password;
-    }
+    @Builder.Default
+    private UserStatus status = UserStatus.ACTIVE;
 }

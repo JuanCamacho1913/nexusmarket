@@ -2,8 +2,9 @@ package com.nexusmarket.domain;
 
 import com.nexusmarket.valueObjects.ProductStatus;
 import com.nexusmarket.valueObjects.ProductType;
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -12,7 +13,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -27,8 +27,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Aggregate root de catálogo. Un producto pertenece a un único vendedor y agrupa
- * sus variantes vendibles.
+ * Aggregate root de catálogo. Un producto pertenece a un único vendedor y lista
+ * sus variantes vendibles como etiquetas de texto.
  */
 @Entity
 @Table(name = "products")
@@ -51,7 +51,7 @@ public class Product {
     private String description;
 
     @Column(precision = 19, scale = 2, nullable = false)
-    private BigDecimal basePrice;
+    private BigDecimal price;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -59,41 +59,16 @@ public class Product {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ProductStatus status;
+    @Builder.Default
+    private ProductStatus status = ProductStatus.PUBLISHED;
 
-    @ManyToOne
+    @ManyToOne(optional = false)
     @JoinColumn(name = "seller_profile_id", nullable = false)
     private SellerProfile sellerProfile;
 
-    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    @ElementCollection
+    @CollectionTable(name = "product_variants", joinColumns = @JoinColumn(name = "product_id"))
+    @Column(name = "variant")
     @Builder.Default
-    private List<ProductVariant> variants = new ArrayList<>();
-
-    public Product(String name, String description, BigDecimal basePrice, ProductType type, SellerProfile sellerProfile) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("El nombre del producto no puede estar vacío");
-        }
-        if (sellerProfile == null) {
-            throw new IllegalArgumentException("El vendedor no puede ser nulo");
-        }
-        validateBasePrice(basePrice);
-        this.name = name;
-        this.description = description;
-        this.basePrice = basePrice;
-        this.type = type;
-        this.sellerProfile = sellerProfile;
-        this.status = ProductStatus.PUBLISHED;
-        this.variants = new ArrayList<>();
-    }
-
-    public void setBasePrice(BigDecimal basePrice) {
-        validateBasePrice(basePrice);
-        this.basePrice = basePrice;
-    }
-
-    private static void validateBasePrice(BigDecimal basePrice) {
-        if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("El precio base debe ser mayor a cero");
-        }
-    }
+    private List<String> variants = new ArrayList<>();
 }

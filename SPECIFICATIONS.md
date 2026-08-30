@@ -1,29 +1,27 @@
 # Especificación de NexusMarket
 
-> Documento generado retroactivamente a partir del modelo de dominio ya implementado
+> Documento generado a partir del modelo de dominio simplificado
 > (`src/main/java/com/nexusmarket/domain` y `src/main/java/com/nexusmarket/valueObjects`).
-> Su objetivo es dejar por escrito la especificación que debería haberse entregado
-> antes de escribir el código, tal como puede reconstruirse observando las clases,
-> sus constructores, sus setters validados y sus anotaciones JPA.
+> Refleja el modelo tal como quedó tras la simplificación: entidades anémicas
+> (POJOs Lombok con anotaciones JPA) salvo dos invariantes de comportamiento que
+> viven en `InventoryItem` y `Order`.
 
 ## 1. Descripción general
 
-NexusMarket es un **marketplace de e-commerce multi-vendedor**: una plataforma donde
-distintos vendedores (`SellerProfile`) publican productos (`Product`) con una o más
-variantes vendibles (`ProductVariant`, con SKU propio y ajuste de precio sobre el
-precio base del producto), y compradores (`BuyerProfile`) los agregan a un carrito
-(`Cart`/`CartItem`) antes de concretar una compra (`Order`/`OrderItem`).
+NexusMarket es un **marketplace de e-commerce multi-vendedor**: distintos
+vendedores (`SellerProfile`) publican productos (`Product`) y los compradores
+(`BuyerProfile`) concretan compras (`Order` / `OrderItem`). Cada producto lista
+sus variantes vendibles como simples etiquetas de texto (`Product.variants`),
+sin entidad propia.
 
-El sistema modela stock **multi-almacén**: cada variante de producto puede tener
-inventario (`InventoryItem`) en distintos almacenes (`Warehouse`), que pueden ser
-propios de la plataforma (`MARKETPLACE`) o de un vendedor concreto (`SELLER`), con
-reserva y liberación de cantidades como operaciones explícitas de dominio. Toda
-compra genera una factura (`BillingInvoice`) asociada uno a uno con la orden, y
-existe un flujo de devoluciones (`ReturnRequest`) gestionado por un administrador.
+El sistema modela stock **multi-almacén**: un producto puede tener inventario
+(`InventoryItem`) en distintos almacenes (`Warehouse`), propios de la plataforma
+(`MARKETPLACE`) o de un vendedor (`SELLER`). El stock nunca puede quedar
+negativo. Toda compra puede generar una factura (`BillingInvoice`) asociada uno a
+uno con la orden, y existe un registro simple de devoluciones (`ReturnRequest`).
 La identidad de todos los actores (comprador, vendedor, operador logístico,
 administrador, supervisor) se modela con una única entidad `User` con un rol
-(`UserRole`), de la cual `BuyerProfile` y `SellerProfile` son perfiles asociados
-uno a uno.
+(`UserRole`); `BuyerProfile` y `SellerProfile` son perfiles asociados uno a uno.
 
 ## 2. Stack tecnológico
 
@@ -32,299 +30,221 @@ Extraído de `pom.xml`:
 - **Java 17** (`<java.version>17</java.version>`)
 - **Spring Boot 4.1.0** (`spring-boot-starter-parent`)
 - **Spring Data JPA** (`spring-boot-starter-data-jpa`) — persistencia relacional de las entidades de dominio (anotaciones `jakarta.persistence.*`)
-- **Spring Data MongoDB** (`spring-boot-starter-data-mongodb`) — dependencia presente en el POM; ninguna clase del dominio actual la usa (no hay documentos Mongo en `domain`)
+- **Spring Data MongoDB** (`spring-boot-starter-data-mongodb`) — dependencia presente en el POM; ninguna clase del dominio actual la usa
 - **Spring Security** (`spring-boot-starter-security`)
 - **Spring Web** (`spring-boot-starter-web`)
-- **MySQL Connector/J** (`com.mysql:mysql-connector-j`, scope `runtime`) — driver de base de datos relacional
-- **Lombok** (`org.projectlombok:lombok`, `optional`) — usado en todas las entidades para `@Getter`, `@Setter`, `@Builder`, `@NoArgsConstructor`, `@AllArgsConstructor`, `@ToString`
-- **spring-boot-starter-test** (scope `test`) — presente en el POM pero, según el alcance de esta entrega, sin pruebas automatizadas escritas todavía (ver sección 6)
+- **MySQL Connector/J** (`com.mysql:mysql-connector-j`, scope `runtime`)
+- **Lombok** (`org.projectlombok:lombok`, `optional`) — `@Getter`, `@Setter`, `@Builder`, `@NoArgsConstructor`, `@AllArgsConstructor`, `@ToString`
+- **spring-boot-starter-test** (scope `test`) — presente en el POM; sin pruebas automatizadas en esta entrega (ver sección 6)
+
+`application.properties` sólo define `spring.application.name`: no hay datasource
+configurado, por lo que las anotaciones de esquema (`unique`, `nullable`,
+`@CollectionTable`) son pistas DDL y no se materializa ningún esquema en runtime.
 
 ## 3. Modelo de dominio
 
+El dominio contiene **exactamente 10 entidades**. Todo `id` es un `String`
+generado (`GenerationType.IDENTITY`) y es el único identificador. Los importes
+son `BigDecimal`.
+
+```
+User ──1:1── BuyerProfile ──1:N── Order ──1:N── OrderItem ──N:1── Product
+ │                                  │                              │
+ │                                  ├──1:1── BillingInvoice        └──N:1── SellerProfile
+ │                                  └──1:N── ReturnRequest
+ └──1:1── SellerProfile ──1:N── Warehouse ──1:N── InventoryItem ──N:1── Product
+```
+
 ### User
 
-Aggregate root de identidad; representa a cualquier usuario del marketplace
-(comprador, vendedor, operador logístico, administrador o supervisor).
+Aggregate root de identidad. POJO anémico (`@Getter/@Setter` Lombok).
 
-- `id: String` — identificador generado (`GenerationType.IDENTITY`).
-- `fullName: String` — no puede ser nulo ni vacío (validado en `setFullName`).
-- `email: String` — no puede ser nulo ni vacío; único a nivel de columna (`unique = true`).
-- `password: String` — no puede ser nulo ni vacío; excluido del `toString()`.
-- `role: UserRole` — no puede ser nulo (validado en el constructor); persistido como `String` (`@Enumerated(EnumType.STRING)`).
-- `status: UserStatus` — se inicializa automáticamente en `ACTIVE` al crear el usuario.
+- `id: String`.
+- `fullName: String` — columna `nullable = false`.
+- `documentId: String` — columna `nullable = false`, `unique = true`.
+- `email: String` — columna `nullable = false`, `unique = true`.
+- `role: UserRole` — `@Enumerated(STRING)`, `nullable = false`.
+- `status: UserStatus` — `@Enumerated(STRING)`, `nullable = false`; default `ACTIVE` vía `@Builder.Default`.
 
-Relaciones: es el punto de referencia de `BuyerProfile.user`, `SellerProfile.user` y
-`ReturnRequest.administrator` (todas relaciones `@OneToOne`/`@ManyToOne` hacia `User`).
+No tiene `password` ni constructores de dominio validados. Es el destino de
+`BuyerProfile.user` y `SellerProfile.user`.
 
 ### BuyerProfile
 
 Perfil de comprador, asociado uno a uno a un `User`.
 
 - `id: String`.
-- `mainAddress: String` — sin validación (puede ser nulo).
-- `commercialStatus: CommercialStatus` — se inicializa en `ACTIVE` al crear el perfil desde su constructor de dominio.
-- `user: User` — no puede ser nulo (validado en constructor); `@OneToOne` con columna única (`user_id`).
-- `shippingAddresses: List<ShippingAddress>` — `@OneToMany` (mappedBy `buyerProfile`, `cascade = ALL`, `orphanRemoval = true`).
-
-Relaciones: dueño de `ShippingAddress` (cascada completa), referenciado por `Cart.buyerProfile` y `Order.buyerProfile`.
+- `mainAddress: String` — columna `nullable = false`.
+- `additionalAddresses: List<String>` — `@ElementCollection`, tabla `buyer_additional_addresses` (columna `address`, longitud 500); default lista vacía.
+- `commercialStatus: CommercialStatus` — `@Enumerated(STRING)`, `nullable = false`; default `ACTIVE` vía `@Builder.Default`.
+- `user: User` — `@OneToOne(optional = false)`, columna única `user_id` (`nullable = false`).
 
 ### SellerProfile
 
-Perfil de vendedor, asociado uno a uno a un `User`. No tiene constructor de dominio
-propio ni validaciones adicionales más allá de las anotaciones JPA (solo constructores
-generados por Lombok).
+Perfil de vendedor, asociado uno a uno a un `User`. POJO anémico.
 
 - `id: String`.
-- `businessName: String` — sin validación.
-- `taxIdentification: String` — sin validación.
-- `user: User` — `@OneToOne`, columna única `user_id` (`nullable = false` a nivel de columna, pero no hay chequeo explícito en código Java).
+- `businessName: String`.
+- `taxIdentification: String`.
+- `user: User` — `@OneToOne`, columna única `user_id` (`nullable = false`).
 - `warehouses: List<Warehouse>` — `@OneToMany` (mappedBy `sellerProfile`), sin cascada.
 - `products: List<Product>` — `@OneToMany` (mappedBy `sellerProfile`), sin cascada.
 
-### ShippingAddress
-
-Dirección de envío asociada a un comprador. Sin constructor de dominio propio ni
-validaciones más allá de JPA.
-
-- `id: String`.
-- `addressDetails: String`, `city: String`, `zipCode: String` — sin validación.
-- `isDefault: boolean` — marca si es la dirección por defecto del comprador (columna `is_default`).
-- `buyerProfile: BuyerProfile` — `@ManyToOne`, `nullable = false`.
-
-La invariante de unicidad de la dirección "default" se enforce desde `BuyerProfile.addShippingAddress`, no desde esta clase.
-
 ### Product
 
-Aggregate root de catálogo. Un producto pertenece a un único vendedor y agrupa sus variantes vendibles.
+Aggregate root de catálogo. Un producto pertenece a un único vendedor.
 
 - `id: String`.
-- `name: String` — no puede ser nulo ni vacío (validado en constructor).
-- `description: String` — sin validación, columna de hasta 2000 caracteres.
-- `basePrice: BigDecimal` — debe ser mayor a cero (validado tanto en el constructor como en `setBasePrice` vía `validateBasePrice`).
-- `type: ProductType` — sin validación de no-nulo en código Java (la columna es `nullable = false`).
-- `status: ProductStatus` — se inicializa en `PUBLISHED` al crear el producto.
-- `sellerProfile: SellerProfile` — no puede ser nulo (validado en constructor); `@ManyToOne`.
-- `variants: List<ProductVariant>` — `@OneToMany` (mappedBy `product`, `cascade = ALL`, `orphanRemoval = true`).
+- `name: String` — columna `nullable = false`.
+- `description: String` — columna de hasta 2000 caracteres.
+- `price: BigDecimal` — `precision = 19, scale = 2`, `nullable = false`.
+- `type: ProductType` — `@Enumerated(STRING)`, `nullable = false`.
+- `status: ProductStatus` — `@Enumerated(STRING)`, `nullable = false`; default `PUBLISHED` vía `@Builder.Default`.
+- `sellerProfile: SellerProfile` — **`@ManyToOne(optional = false)`**, `seller_profile_id nullable = false`.
+- `variants: List<String>` — `@ElementCollection`, tabla `product_variants` (columna `variant`); default lista vacía.
 
-### ProductVariant
-
-Variante vendible de un producto (p. ej. talle/color), con su propio SKU y un ajuste de precio sobre el precio base.
-
-- `id: String`.
-- `sku: String` — no puede ser nulo ni vacío (validado en constructor); único a nivel de columna.
-- `variantName: String` — sin validación.
-- `priceAdjustment: BigDecimal` — si se pasa `null` al constructor, se normaliza a `BigDecimal.ZERO`.
-- `product: Product` — no puede ser nulo (validado en constructor); `@ManyToOne`.
-- Método `getFinalPrice()`: calcula `product.getBasePrice() + priceAdjustment` (precio final derivado, no persistido).
+No hay precio derivado ni método de recálculo.
 
 ### Warehouse
 
-Almacén físico donde se guarda inventario. Sin constructor de dominio propio ni
-validaciones más allá de JPA.
+Almacén físico donde se guarda inventario. POJO anémico.
 
 - `id: String`.
-- `name: String`, `location: String` — sin validación.
-- `type: WarehouseType` — sin validación de no-nulo en código.
-- `sellerProfile: SellerProfile` — `@ManyToOne`, `nullable = true` **a propósito**: el comentario del código aclara que un almacén de tipo `MARKETPLACE` pertenece a la plataforma y no a un vendedor, por lo que puede no tener `sellerProfile`.
+- `name: String`, `location: String`.
+- `type: WarehouseType` — `@Enumerated(STRING)`, `nullable = false`.
+- `sellerProfile: SellerProfile` — `@ManyToOne`, `nullable = true` **a propósito**: un almacén `MARKETPLACE` pertenece a la plataforma y no a un vendedor.
 
 ### InventoryItem
 
-Registro de stock de una variante de producto en un almacén determinado. Es la clase
-con más lógica de invariantes de todo el dominio: la cantidad disponible nunca puede
-quedar negativa, y toda mutación pasa por métodos de dominio explícitos, nunca por
-asignación directa del campo.
+Registro de stock de un producto en un almacén. Mantiene la invariante de
+inventario no negativo.
 
 - `id: String`.
-- `availableQuantity: int` — nunca negativo (validado en constructor y en `setAvailableQuantity`).
-- `reservedQuantity: int` — se inicializa en 0 al crear el ítem.
-- `status: InventoryStatus` — derivado automáticamente (`refreshStatus`), nunca asignado manualmente desde fuera de la clase.
-- `productVariant: ProductVariant` — no puede ser nulo (validado en constructor); `@ManyToOne(optional = false)`.
-- `warehouse: Warehouse` — no puede ser nulo (validado en constructor); `@ManyToOne(optional = false)`.
-- Restricción única compuesta a nivel de tabla: `(product_variant_id, warehouse_id)` — un mismo par variante/almacén no puede repetirse.
+- `quantity: int` — columna `nullable = false`; **sin setter** (`@Setter(AccessLevel.NONE)`).
+- `product: Product` — **`@ManyToOne(optional = false)`**, `product_id nullable = false`.
+- `warehouse: Warehouse` — **`@ManyToOne(optional = false)`**, `warehouse_id nullable = false`.
+- Restricción única compuesta a nivel de tabla: `(product_id, warehouse_id)`.
 
-Métodos de dominio:
-- `reserve(qty)`: `qty` debe ser mayor a cero; requiere que `availableQuantity >= qty`; mueve cantidad de disponible a reservado.
-- `release(qty)`: `qty` debe ser mayor a cero; requiere que `reservedQuantity >= qty`; mueve cantidad de reservado a disponible.
-- `decrementAvailable(qty)`: `qty` debe ser mayor a cero; no puede dejar `availableQuantity` en negativo; descuenta stock de forma definitiva (p. ej. al despachar).
-- `refreshStatus()` (privado): recalcula `status` — `OUT_OF_STOCK` si ambas cantidades son 0, `RESERVED` si no queda disponible pero sí reservado, `AVAILABLE` en cualquier otro caso.
-
-### Cart
-
-Carrito de compras de un comprador.
-
-- `id: String`.
-- `createdAt: LocalDateTime` — se fija en el momento de creación del carrito.
-- `buyerProfile: BuyerProfile` — no puede ser nulo (validado en constructor); `@OneToOne`, columna única `buyer_profile_id` (un comprador tiene a lo sumo un carrito).
-- `items: List<CartItem>` — `@OneToMany` (mappedBy `cart`, `cascade = ALL`, `orphanRemoval = true`).
-- Método `addItem(variant, quantity)`: `variant` no puede ser nulo; delega la validación de `quantity` al constructor de `CartItem`.
-
-### CartItem
-
-Línea de un carrito, referenciando una variante de producto y una cantidad.
-
-- `id: String`.
-- `quantity: int` — debe ser mayor a cero (validado en constructor y en `setQuantity`).
-- `cart: Cart` — no puede ser nulo (validado en constructor); `@ManyToOne`.
-- `productVariant: ProductVariant` — no puede ser nulo (validado en constructor); `@ManyToOne`.
+Método de dominio:
+- `adjust(int delta)`: suma `delta` a `quantity` (positivo repone, negativo consume). Si el resultado sería `< 0` lanza `IllegalArgumentException` y `quantity` queda intacto. Es la **única** vía de mutación de `quantity`.
 
 ### Order
 
-Aggregate root de la compra. El comentario de la clase explicita que, a través de
-`OrderItem`, se congela el precio pagado por cada variante, porque el precio de un
-`ProductVariant` puede cambiar después de concretada la compra.
+Aggregate root de la compra. Una orden `DELIVERED_FINALIZED` es inmutable.
 
 - `id: String`.
-- `orderTrackingNumber: String` — no puede ser nulo ni vacío (validado en constructor); único a nivel de columna.
-- `status: OrderStatus` — se inicializa en `CART` al crear la orden.
-- `totalAmount: BigDecimal` — se inicializa en `BigDecimal.ZERO` y se recalcula con `recalculateTotal()`.
-- `createdAt: LocalDateTime` — se fija en el momento de creación.
-- `buyerProfile: BuyerProfile` — no puede ser nulo (validado en constructor); `@ManyToOne`.
-- `items: List<OrderItem>` — `@OneToMany` (mappedBy `order`, `cascade = ALL`, `orphanRemoval = true`).
+- `status: OrderStatus` — `@Enumerated(STRING)`, `nullable = false`; default `CART` vía `@Builder.Default`.
+- `totalAmount: BigDecimal` — `precision = 19, scale = 2`; campo plano almacenado, el dominio nunca lo calcula; default `BigDecimal.ZERO`.
+- `buyerProfile: BuyerProfile` — **`@ManyToOne(optional = false)`**, `buyer_profile_id nullable = false`.
+- `items: List<OrderItem>` — `@OneToMany` (mappedBy `order`, `cascade = ALL`, `orphanRemoval = true`); no expone getter Lombok.
 
-Métodos de dominio:
-- `addItem(item)`: `item` no puede ser nulo; agrega el ítem y **recalcula el total automáticamente**.
-- `recalculateTotal()`: suma el `subtotal` de cada `OrderItem` y actualiza `totalAmount`.
+Métodos de dominio (la clase **no** tiene `@Setter` a nivel de clase):
+- `getItems()`: devuelve `Collections.unmodifiableList(items)`.
+- `addItem(OrderItem)`: `assertNotFinalized()`; rechaza `null` con `IllegalArgumentException`; agrega el ítem.
+- `updateStatus(OrderStatus)`: `assertNotFinalized()`; asigna el nuevo estado. Transicionar *hacia* `DELIVERED_FINALIZED` está permitido; toda mutación posterior se rechaza.
+- `setTotalAmount(BigDecimal)`: `assertNotFinalized()`; asigna.
+- `setBuyerProfile(BuyerProfile)`: `assertNotFinalized()`; asigna.
+- `assertNotFinalized()` (privado): si `status == DELIVERED_FINALIZED` lanza `IllegalStateException`.
 
 ### OrderItem
 
-Detalle congelado de una compra. La clase **intencionalmente no expone setters** de
-cantidad ni precio (solo tiene `@Getter`, no `@Setter`): `unitPriceAtPurchase` es un
-snapshot tomado en el momento de la compra que nunca se recalcula desde
-`ProductVariant`, y `subtotal` se calcula una única vez en el constructor.
+Detalle congelado de una compra. **Inmutable**: sólo `@Getter`, sin setters.
 
 - `id: String`.
-- `quantity: int` — debe ser mayor a cero (validado en constructor).
-- `unitPriceAtPurchase: BigDecimal` — no puede ser nulo ni negativo (validado en constructor); es el precio "congelado" al momento de la compra.
-- `subtotal: BigDecimal` — calculado como `unitPriceAtPurchase * quantity`, una única vez, en el constructor; no tiene setter.
-- `order: Order` — no puede ser nulo (validado en constructor); `@ManyToOne`.
-- `productVariant: ProductVariant` — no puede ser nulo (validado en constructor); `@ManyToOne`.
+- `quantity: int` — columna `nullable = false`.
+- `unitPrice: BigDecimal` — `precision = 19, scale = 2`, `nullable = false`; snapshot del precio al momento de la compra, nunca se recalcula.
+- `order: Order` — `@ManyToOne(optional = false)`, `order_id nullable = false`.
+- `product: Product` — `@ManyToOne(optional = false)`, `product_id nullable = false`.
+
+No hay `subtotal` ni ningún campo derivado.
 
 ### BillingInvoice
 
-Factura de una orden. Sin constructor de dominio propio ni validaciones más allá de JPA.
+Factura de una orden. POJO anémico.
 
 - `id: String`.
-- `invoiceNumber: String` — único a nivel de columna; sin validación explícita en código.
-- `tax: BigDecimal`, `totalPaid: BigDecimal` — sin validación.
-- `issuedAt: LocalDateTime` — sin validación.
-- `order: Order` — `@OneToOne`, columna única `order_id` (una orden tiene a lo sumo una factura).
+- `amount: BigDecimal` — `precision = 19, scale = 2`.
+- `issuedAt: LocalDateTime`.
+- `order: Order` — `@OneToOne(optional = false)`, columna única `order_id` (`nullable = false`).
+
+No hay `invoiceNumber` ni `tax`.
 
 ### ReturnRequest
 
-Solicitud de devolución sobre una orden, gestionada por un administrador.
+Registro simple de devolución sobre una orden. POJO anémico, sin métodos.
 
 - `id: String`.
-- `reason: String` — sin validación explícita (columna de hasta 1000 caracteres).
-- `status: ReturnStatus` — se inicializa en `REQUESTED` al crear la solicitud.
-- `order: Order` — no puede ser nula (validado en constructor); `@ManyToOne`.
-- `administrator: User` — no puede ser nulo (validado en constructor); `@ManyToOne`. El propio código deja explícito en un comentario que la validación de que este `User` tenga `role = ADMINISTRATOR` se hace en la capa de servicio, no en la entidad ("la entidad no conoce reglas de autorización").
+- `reason: String` — columna de hasta 1000 caracteres.
+- `order: Order` — `@ManyToOne(optional = false)`, `order_id nullable = false`.
+
+No hay `status` ni referencia a administrador.
 
 ## 4. Enumerados
 
+El paquete `valueObjects` contiene **exactamente 7 enumerados**.
+
 ### UserRole
-Rol de un `User` dentro del marketplace.
-- `BUYER` — comprador.
-- `SELLER` — vendedor.
-- `LOGISTICS_OPERATOR` — operador logístico.
-- `ADMINISTRATOR` — administrador de la plataforma.
-- `SUPERVISOR` — supervisor.
+- `BUYER`, `SELLER`, `LOGISTICS_OPERATOR`, `ADMINISTRATOR`, `SUPERVISOR`.
 
 ### UserStatus
-Estado de la cuenta de un `User`.
-- `ACTIVE` — cuenta activa (estado inicial por defecto).
-- `BLOCKED` — cuenta bloqueada.
-- `SUSPENDED` — cuenta suspendida.
+- `ACTIVE` (estado inicial por defecto), `BLOCKED`, `INACTIVE`.
 
 ### CommercialStatus
 Estado comercial de un `BuyerProfile`.
-- `ACTIVE` — comprador habilitado (estado inicial por defecto).
-- `RESTRICTED` — comprador con restricciones comerciales.
-- `SUSPENDED` — comprador suspendido.
+- `ACTIVE` (default), `RESTRICTED`, `SUSPENDED`.
 
 ### WarehouseType
-Tipo de un `Warehouse`.
-- `MARKETPLACE` — almacén propio de la plataforma (no pertenece a un vendedor).
+- `MARKETPLACE` — almacén propio de la plataforma.
 - `SELLER` — almacén propio de un vendedor.
 
 ### ProductType
-Naturaleza de un `Product`.
-- `PHYSICAL` — producto físico.
-- `DIGITAL` — producto digital.
+- `PHYSICAL`, `DIGITAL`.
 
 ### ProductStatus
-Estado de publicación de un `Product`.
-- `PUBLISHED` — publicado y visible (estado inicial por defecto).
-- `SUSPENDED` — suspendido temporalmente.
-- `DISCONTINUED` — descontinuado.
+- `PUBLISHED` (default), `SUSPENDED`, `DISCONTINUED`.
 
 ### OrderStatus
-Ciclo de vida de una `Order`.
-- `CART` — la orden todavía es un carrito, no confirmada (estado inicial por defecto).
-- `PENDING_PAYMENT` — pendiente de pago.
-- `PAID` — pagada.
-- `DISPATCHED` — despachada.
-- `DELIVERED_FINALIZED` — entregada y finalizada.
+- `CART` (default), `PENDING_PAYMENT`, `PAID`, `DISPATCHED`, `DELIVERED_FINALIZED`.
 
-### InventoryStatus
-Estado de stock de un `InventoryItem`. El propio código aclara en un comentario que
-**no estaba especificado en el enunciado original** y que se agregó para soportar
-las invariantes de reserva/liberación de inventario.
-- `AVAILABLE` — hay cantidad disponible.
-- `RESERVED` — no queda disponible, pero sí hay cantidad reservada.
-- `OUT_OF_STOCK` — sin disponible ni reservado.
+Se eliminaron `InventoryStatus` y `ReturnStatus`: el estado de inventario dejó de
+modelarse (sólo importa `quantity`) y las devoluciones ya no tienen ciclo de vida.
 
-### ReturnStatus
-Ciclo de vida de una `ReturnRequest`. El propio código aclara en un comentario que
-**no estaba especificado en el enunciado original** y que se agregó para modelar el
-flujo de aprobación de devoluciones.
-- `REQUESTED` — solicitada (estado inicial por defecto).
-- `UNDER_REVIEW` — en revisión.
-- `APPROVED` — aprobada.
-- `REJECTED` — rechazada.
-- `COMPLETED` — completada.
+## 5. Invariantes y reglas de negocio
 
-## 5. Reglas de negocio
+El modelo es deliberadamente anémico. Sólo se conservan **tres** invariantes,
+todas en el límite del modelo:
 
-- Un `User` no puede tener `fullName` nulo o vacío.
-- Un `User` no puede tener `email` nulo o vacío; el email es único en la base de datos.
-- Un `User` no puede tener `password` nulo o vacío.
-- Un `User` no puede tener `role` nulo.
-- Al crear un `User`, su `status` se fija automáticamente en `ACTIVE`.
-- Un `BuyerProfile` no puede crearse sin un `User` asociado (no nulo).
-- Al crear un `BuyerProfile`, su `commercialStatus` se fija automáticamente en `ACTIVE`.
-- Un `BuyerProfile` no puede agregar una `ShippingAddress` nula.
-- Si la `ShippingAddress` agregada está marcada como `isDefault`, todas las demás direcciones del comprador se desmarcan automáticamente: solo puede existir una dirección default a la vez.
-- Un `Product` no puede tener `name` nulo o vacío.
-- Un `Product` no puede crearse sin un `SellerProfile` asociado (no nulo).
-- El `basePrice` de un `Product` debe ser mayor a cero, tanto al crearlo como al modificarlo.
-- Al crear un `Product`, su `status` se fija automáticamente en `PUBLISHED`.
-- Un `ProductVariant` no puede tener `sku` nulo o vacío; el SKU es único.
-- Un `ProductVariant` no puede crearse sin un `Product` asociado (no nulo).
-- Si el `priceAdjustment` de un `ProductVariant` es nulo, se normaliza a `BigDecimal.ZERO`.
-- El precio final de un `ProductVariant` (`getFinalPrice()`) es el precio base de su producto más su `priceAdjustment`.
-- Un `InventoryItem` no puede crearse sin `ProductVariant` ni `Warehouse` asociados (ambos no nulos).
-- La `availableQuantity` de un `InventoryItem` nunca puede ser negativa (validado en constructor y setter).
-- Un `InventoryItem` no puede reservar (`reserve`) más cantidad que la disponible; la cantidad a reservar debe ser mayor a cero.
-- Un `InventoryItem` no puede liberar (`release`) más cantidad que la reservada; la cantidad a liberar debe ser mayor a cero.
-- Un `InventoryItem` no puede descontar (`decrementAvailable`) una cantidad que deje `availableQuantity` en negativo; la cantidad a descontar debe ser mayor a cero.
-- El `status` de un `InventoryItem` se recalcula automáticamente tras cada operación de reserva/liberación/descuento, nunca se asigna manualmente desde fuera de la clase.
-- No puede existir más de un `InventoryItem` para el mismo par (`productVariant`, `warehouse`) — restricción única a nivel de tabla.
-- Un `Warehouse` de tipo `MARKETPLACE` puede no tener `sellerProfile` (pertenece a la plataforma, no a un vendedor); esta es la única razón documentada por la que esa relación es nullable.
-- Un `Cart` no puede crearse sin un `BuyerProfile` asociado (no nulo); cada comprador tiene a lo sumo un carrito (columna única).
-- Un `CartItem` no puede agregarse a un `Cart` con una `ProductVariant` nula.
-- La `quantity` de un `CartItem` debe ser mayor a cero, tanto al crearlo como al modificarla.
-- Una `Order` no puede tener `orderTrackingNumber` nulo o vacío; es único.
-- Una `Order` no puede crearse sin un `BuyerProfile` asociado (no nulo).
-- Al crear una `Order`, su `status` se fija en `CART` y su `totalAmount` en cero.
-- Al agregar un `OrderItem` a una `Order`, el total de la orden se recalcula automáticamente sumando el subtotal de todos sus ítems.
-- Un `OrderItem` no puede tener `quantity` menor o igual a cero.
-- Un `OrderItem` no puede tener `unitPriceAtPurchase` nulo ni negativo.
-- El `subtotal` de un `OrderItem` se calcula como `unitPriceAtPurchase * quantity`, una única vez en el constructor, y no puede modificarse después (no tiene setter): es un snapshot inmutable del precio pagado.
-- Cada `Order` tiene a lo sumo una `BillingInvoice` (relación uno a uno con columna única); el número de factura es único.
-- Una `ReturnRequest` no puede crearse sin una `Order` asociada (no nula).
-- Una `ReturnRequest` no puede crearse sin un `User` administrador asociado (no nulo); sin embargo, la entidad **no valida** que ese usuario tenga efectivamente `role = ADMINISTRATOR` — esa validación de autorización queda delegada explícitamente a la capa de servicio.
-- Al crear una `ReturnRequest`, su `status` se fija automáticamente en `REQUESTED`.
+1. **El stock nunca es negativo.** `InventoryItem.quantity` no tiene setter; la
+   única mutación es `adjust(int delta)`, que lanza `IllegalArgumentException`
+   (dejando `quantity` sin cambios) cuando el resultado sería `< 0`.
+2. **Un pedido finalizado es inmutable.** Con `Order.status == DELIVERED_FINALIZED`,
+   `addItem`, `updateStatus`, `setTotalAmount` y `setBuyerProfile` lanzan
+   `IllegalStateException`. `getItems()` devuelve una lista no modificable, de modo
+   que tampoco se puede mutar la colección por fuera de `addItem`.
+3. **Los dueños obligatorios se declaran no opcionales en el mapeo JPA**
+   (no con chequeos en constructores): `InventoryItem.product`,
+   `InventoryItem.warehouse`, `Order.buyerProfile`, `Product.sellerProfile` son
+   `@ManyToOne(optional = false)` con `@JoinColumn(nullable = false)`;
+   `BuyerProfile.user` es `@OneToOne(optional = false)`.
 
-## 6. Fuera de alcance en esta entrega
+Además:
 
-Las pruebas unitarias automatizadas fueron intencionalmente pospuestas para una entrega posterior.
+- La unicidad de `User.email` y `User.documentId` se declara con `@Column(unique = true)` (pista DDL únicamente; no hay verificación en runtime sin datasource ni repositorio).
+- La unicidad compuesta `(product_id, warehouse_id)` de `InventoryItem` se declara con `@UniqueConstraint`.
+- Un `Warehouse` de tipo `MARKETPLACE` puede no tener `sellerProfile`.
+- `OrderItem` es un snapshot inmutable: `unitPrice` se fija al construirlo y no cambia.
+- `Order.totalAmount` es un campo plano almacenado; el dominio no lo calcula.
+- **No existe ningún campo o método derivado**: no hay `subtotal`, `getFinalPrice`, `recalculateTotal`, `refreshStatus`, `priceAdjustment` ni equivalentes.
+
+## 6. Fuera de alcance en esta entrega (diferido, no es un defecto)
+
+Los siguientes puntos se dejaron **explícitamente diferidos** a una entrega
+posterior y no deben tratarse como huecos del modelo:
+
+- Enforcement real de unicidad de `email` / `documentId` (hoy sólo columna `unique = true`; la búsqueda previa corresponde a un servicio futuro).
+- Autorización del registro de vendedores por parte de un Administrador.
+- La matriz de responsabilidades de autorización por rol (`UserRole`).
+- Estado de inventario dañado y cualquier flujo de reserva / liberación de stock.
+- Cálculo del total de una orden a partir de sus ítems.
+- Numeración de facturas y cálculo de impuestos.
+- Pruebas unitarias automatizadas (pospuestas de forma intencional para esta entrega).
