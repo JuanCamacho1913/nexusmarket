@@ -5,9 +5,9 @@ package com.nexusmarket.valueObjects;
  * se agrega para modelar el flujo de aprobación de devoluciones.
  */
 public enum ReturnStatus {
-    SOLICITADA,
-    EN_REVISION,
-    APROBADA,
-    RECHAZADA,
-    COMPLETADA
+    REQUESTED,
+    UNDER_REVIEW,
+    APPROVED,
+    REJECTED,
+    COMPLETED
 }

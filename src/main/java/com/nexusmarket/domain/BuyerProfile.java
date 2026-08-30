@@ -36,7 +36,7 @@ public class BuyerProfile {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
     private String mainAddress;
 
@@ -58,7 +58,7 @@ public class BuyerProfile {
         }
         this.user = user;
         this.mainAddress = mainAddress;
-        this.commercialStatus = CommercialStatus.ACTIVO;
+        this.commercialStatus = CommercialStatus.ACTIVE;
         this.shippingAddresses = new ArrayList<>();
     }
 

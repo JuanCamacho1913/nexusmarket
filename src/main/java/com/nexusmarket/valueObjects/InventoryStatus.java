@@ -5,7 +5,7 @@ package com.nexusmarket.valueObjects;
  * se agrega para soportar las invariantes de reserva/liberación de inventario.
  */
 public enum InventoryStatus {
-    DISPONIBLE,
-    RESERVADO,
-    AGOTADO
+    AVAILABLE,
+    RESERVED,
+    OUT_OF_STOCK
 }

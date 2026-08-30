@@ -34,7 +34,7 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
     @Column(nullable = false)
     private String fullName;
@@ -61,7 +61,7 @@ public class User {
             throw new IllegalArgumentException("El rol no puede ser nulo");
         }
         this.role = role;
-        this.status = UserStatus.ACTIVO;
+        this.status = UserStatus.ACTIVE;
     }
 
     public void setFullName(String fullName) {

@@ -42,7 +42,7 @@ public class Product {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
     @Column(nullable = false)
     private String name;
@@ -82,7 +82,7 @@ public class Product {
         this.basePrice = basePrice;
         this.type = type;
         this.sellerProfile = sellerProfile;
-        this.status = ProductStatus.PUBLICADO;
+        this.status = ProductStatus.PUBLISHED;
         this.variants = new ArrayList<>();
     }
 

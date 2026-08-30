@@ -31,7 +31,7 @@ public class ReturnRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
     @Column(length = 1000)
     private String reason;
@@ -44,7 +44,7 @@ public class ReturnRequest {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
-    // La validación de que este User tenga role = ADMINISTRADOR se realiza en la
+    // La validación de que este User tenga role = ADMINISTRATOR se realiza en la
     // capa de servicio (no en la entidad): la entidad no conoce reglas de autorización.
     @ManyToOne
     @JoinColumn(name = "administrator_id", nullable = false)
@@ -60,6 +60,6 @@ public class ReturnRequest {
         this.reason = reason;
         this.order = order;
         this.administrator = administrator;
-        this.status = ReturnStatus.SOLICITADA;
+        this.status = ReturnStatus.REQUESTED;
     }
 }

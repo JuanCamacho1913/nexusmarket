@@ -43,7 +43,7 @@ public class Order {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
     @Column(nullable = false, unique = true)
     private String orderTrackingNumber;
@@ -74,7 +74,7 @@ public class Order {
         }
         this.orderTrackingNumber = orderTrackingNumber;
         this.buyerProfile = buyerProfile;
-        this.status = OrderStatus.CARRITO;
+        this.status = OrderStatus.CART;
         this.totalAmount = BigDecimal.ZERO;
         this.createdAt = LocalDateTime.now();
         this.items = new ArrayList<>();

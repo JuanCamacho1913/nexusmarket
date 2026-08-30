@@ -39,7 +39,7 @@ public class InventoryItem {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
     @Column(nullable = false)
     private int availableQuantity;
@@ -124,11 +124,11 @@ public class InventoryItem {
 
     private void refreshStatus() {
         if (availableQuantity == 0 && reservedQuantity == 0) {
-            this.status = InventoryStatus.AGOTADO;
+            this.status = InventoryStatus.OUT_OF_STOCK;
         } else if (availableQuantity == 0) {
-            this.status = InventoryStatus.RESERVADO;
+            this.status = InventoryStatus.RESERVED;
         } else {
-            this.status = InventoryStatus.DISPONIBLE;
+            this.status = InventoryStatus.AVAILABLE;
         }
     }
 }
