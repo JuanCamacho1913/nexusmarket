@@ -1,4 +1,4 @@
-package com.nexusmarket.domain;
+package com.nexusmarket.domain.models;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;

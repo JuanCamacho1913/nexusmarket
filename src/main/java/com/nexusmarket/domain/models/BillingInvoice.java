@@ -1,23 +1,22 @@
-package com.nexusmarket.domain;
+package com.nexusmarket.domain.models;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
-@Setter
 @Getter
+@Setter
 @NoArgsConstructor
-public class OrderItem {
+public class BillingInvoice {
 
     private String id;
 
-    private int quantity;
+    private BigDecimal amount;
 
-    private BigDecimal unitPrice;
+    private LocalDateTime issuedAt;
 
     private Order order;
-
-    private Product product;
 }
