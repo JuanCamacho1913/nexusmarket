@@ -1,4 +1,4 @@
-package com.nexusmarket.valueObjects;
+package com.nexusmarket.domain.valueObjects;
 
 public enum UserRole {
     BUYER,

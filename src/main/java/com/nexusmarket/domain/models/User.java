@@ -1,7 +1,7 @@
-package com.nexusmarket.domain;
+package com.nexusmarket.domain.models;
 
-import com.nexusmarket.valueObjects.UserRole;
-import com.nexusmarket.valueObjects.UserStatus;
+import com.nexusmarket.domain.valueObjects.UserRole;
+import com.nexusmarket.domain.valueObjects.UserStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;

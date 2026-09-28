@@ -1,6 +1,6 @@
-package com.nexusmarket.domain;
+package com.nexusmarket.domain.models;
 
-import com.nexusmarket.valueObjects.CommercialStatus;
+import com.nexusmarket.domain.valueObjects.CommercialStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;

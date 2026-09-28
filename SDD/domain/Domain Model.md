@@ -1,17 +1,17 @@
 # Domain Model
 
-> Extraído de `SPECIFICATIONS.md` (secciones 3-5). Contiene únicamente las
-> especificaciones de la capa de dominio (`src/main/java/com/nexusmarket/domain`
-> y `src/main/java/com/nexusmarket/valueObjects`) — sin stack tecnológico ni
-> alcance de otras capas.
+> Extracted from `SPECIFICATIONS.md` (sections 3-5). Contains only the
+> specifications of the domain layer (`src/main/java/com/nexusmarket/domain`
+> and `src/main/java/com/nexusmarket/valueObjects`) — without the technology
+> stack or the scope of other layers.
 
-## 1. Modelo de dominio
+## 1. Domain model
 
-El dominio contiene **exactamente 10 entidades**, todas POJOs anémicos con
-`@Getter @Setter @NoArgsConstructor` (sin excepciones — ninguna clase agrega
-lógica ni restringe constructores o setters). Todo `id` es un `String` sin
-estrategia de generación asignada (se definirá junto con la capa de
-persistencia). Los importes son `BigDecimal`.
+The domain contains **exactly 10 entities**, all anemic POJOs with
+`@Getter @Setter @NoArgsConstructor` (no exceptions — no class adds logic or
+restricts constructors or setters). Every `id` is a `String` with no assigned
+generation strategy (it will be defined together with the persistence layer).
+Amounts are `BigDecimal`.
 
 ```
 User ──1:1── BuyerProfile ──1:N── Order ──1:N── OrderItem ──N:1── Product
@@ -23,42 +23,42 @@ User ──1:1── BuyerProfile ──1:N── Order ──1:N── OrderIte
 
 ### User
 
-Aggregate root de identidad.
+Identity aggregate root.
 
 - `id: String`
 - `fullName: String`
 - `documentId: String`
 - `email: String`
 - `role: UserRole`
-- `status: UserStatus` — default `ACTIVE` (valor inicial del campo)
+- `status: UserStatus` — default `ACTIVE` (initial value of the field)
 
-No tiene `password` ni constructores de dominio validados. Es el destino de
-`BuyerProfile.user` y `SellerProfile.user`.
+It has no `password` and no validated domain constructors. It is the target of
+`BuyerProfile.user` and `SellerProfile.user`.
 
 ### BuyerProfile
 
-Perfil de comprador, asociado a un `User`.
+Buyer profile, associated with a `User`.
 
 - `id: String`
 - `mainAddress: String`
-- `additionalAddresses: List<String>` — default lista vacía
+- `additionalAddresses: List<String>` — default empty list
 - `commercialStatus: CommercialStatus` — default `ACTIVE`
 - `user: User`
 
 ### SellerProfile
 
-Perfil de vendedor, asociado a un `User`.
+Seller profile, associated with a `User`.
 
 - `id: String`
 - `businessName: String`
 - `taxIdentification: String`
 - `user: User`
-- `warehouses: List<Warehouse>` — default lista vacía
-- `products: List<Product>` — default lista vacía
+- `warehouses: List<Warehouse>` — default empty list
+- `products: List<Product>` — default empty list
 
 ### Product
 
-Aggregate root de catálogo. Un producto pertenece a un único vendedor.
+Catalog aggregate root. A product belongs to a single seller.
 
 - `id: String`
 - `name: String`
@@ -67,41 +67,41 @@ Aggregate root de catálogo. Un producto pertenece a un único vendedor.
 - `type: ProductType`
 - `status: ProductStatus` — default `PUBLISHED`
 - `sellerProfile: SellerProfile`
-- `variants: List<String>` — default lista vacía
+- `variants: List<String>` — default empty list
 
-No hay precio derivado ni método de recálculo.
+There is no derived price and no recalculation method.
 
 ### Warehouse
 
-Almacén físico donde se guarda inventario.
+Physical warehouse where inventory is stored.
 
 - `id: String`
 - `name: String`, `location: String`
 - `type: WarehouseType`
-- `sellerProfile: SellerProfile` — puede ser `null`: un almacén `MARKETPLACE` pertenece a la plataforma y no a un vendedor.
+- `sellerProfile: SellerProfile` — may be `null`: a `MARKETPLACE` warehouse belongs to the platform and not to a seller.
 
 ### InventoryItem
 
-Registro de stock de un producto en un almacén.
+Stock record of a product in a warehouse.
 
 - `id: String`
-- `quantity: int` — sin restricción de valor mínimo en esta entrega (ver sección 3)
+- `quantity: int` — no minimum value constraint in this delivery (see section 3)
 - `product: Product`
 - `warehouse: Warehouse`
 
 ### Order
 
-Representa una compra.
+Represents a purchase.
 
 - `id: String`
 - `status: OrderStatus` — default `CART`
-- `totalAmount: BigDecimal` — campo plano almacenado; el dominio no lo calcula; default `BigDecimal.ZERO`
+- `totalAmount: BigDecimal` — stored flat field; the domain does not compute it; default `BigDecimal.ZERO`
 - `buyerProfile: BuyerProfile`
-- `items: List<OrderItem>` — default lista vacía, con getter/setter estándar
+- `items: List<OrderItem>` — default empty list, with standard getter/setter
 
 ### OrderItem
 
-Detalle de una compra.
+Line item of a purchase.
 
 - `id: String`
 - `quantity: int`
@@ -109,46 +109,46 @@ Detalle de una compra.
 - `order: Order`
 - `product: Product`
 
-No hay `subtotal` ni ningún campo derivado.
+There is no `subtotal` or any derived field.
 
 ### BillingInvoice
 
-Factura de una orden.
+Invoice of an order.
 
 - `id: String`
 - `amount: BigDecimal`
 - `issuedAt: LocalDateTime`
 - `order: Order`
 
-No hay `invoiceNumber` ni `tax`.
+There is no `invoiceNumber` or `tax`.
 
 ### ReturnRequest
 
-Registro simple de devolución sobre una orden.
+Simple return record on an order.
 
 - `id: String`
 - `reason: String`
 - `order: Order`
 
-No hay `status` ni referencia a administrador.
+There is no `status` and no reference to an administrator.
 
-## 2. Enumerados
+## 2. Enumerations
 
-El paquete `valueObjects` contiene **exactamente 7 enumerados**.
+The `valueObjects` package contains **exactly 7 enumerations**.
 
 ### UserRole
 - `BUYER`, `SELLER`, `LOGISTICS_OPERATOR`, `ADMINISTRATOR`, `SUPERVISOR`.
 
 ### UserStatus
-- `ACTIVE` (estado inicial por defecto), `BLOCKED`, `INACTIVE`.
+- `ACTIVE` (default initial state), `BLOCKED`, `INACTIVE`.
 
 ### CommercialStatus
-Estado comercial de un `BuyerProfile`.
+Commercial status of a `BuyerProfile`.
 - `ACTIVE` (default), `RESTRICTED`, `SUSPENDED`.
 
 ### WarehouseType
-- `MARKETPLACE` — almacén propio de la plataforma.
-- `SELLER` — almacén propio de un vendedor.
+- `MARKETPLACE` — the platform's own warehouse.
+- `SELLER` — a seller's own warehouse.
 
 ### ProductType
 - `PHYSICAL`, `DIGITAL`.
@@ -159,17 +159,17 @@ Estado comercial de un `BuyerProfile`.
 ### OrderStatus
 - `CART` (default), `PENDING_PAYMENT`, `PAID`, `DISPATCHED`, `DELIVERED_FINALIZED`.
 
-Se eliminaron `InventoryStatus` y `ReturnStatus`: el estado de inventario dejó de
-modelarse (sólo importa `quantity`) y las devoluciones ya no tienen ciclo de vida.
+`InventoryStatus` and `ReturnStatus` were removed: inventory status is no longer
+modeled (only `quantity` matters) and returns no longer have a lifecycle.
 
-## 3. Invariantes y reglas de negocio
+## 3. Invariants and business rules
 
-**Ninguna.** El dominio de esta entrega es intencionalmente anémico: no hay
-constructores validados, ni setters restringidos, ni métodos que protejan
-reglas de negocio. Cualquier código externo puede, por ejemplo, dejar
-`InventoryItem.quantity` en negativo o modificar un `Order` en estado
-`DELIVERED_FINALIZED` sin que el dominio lo impida.
+**None.** The domain in this delivery is intentionally anemic: there are no
+validated constructors, no restricted setters, and no methods that protect
+business rules. Any external code can, for example, leave
+`InventoryItem.quantity` negative or modify an `Order` in the
+`DELIVERED_FINALIZED` state without the domain preventing it.
 
-Esta decisión sigue el patrón mostrado por la cátedra (entidades con solo
-`@Getter/@Setter/@NoArgsConstructor`, sin lógica) y se documenta como una
-decisión consciente para esta entrega, no como un defecto.
+This decision follows the pattern shown by the course instructors (entities with
+only `@Getter/@Setter/@NoArgsConstructor`, no logic) and is documented as a
+conscious decision for this delivery, not as a defect.
